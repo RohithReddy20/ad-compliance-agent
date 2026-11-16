@@ -1,0 +1,31 @@
+backend/app/golden.py
+  s_4964e310483ef2::t_5875be8264de46 1-50
+backend/app/agents.py
+  s_4964e310483ef2::t_faaaab58ab7577 1-112,114-185,187-188,190,200-261
+  s_4964e310483ef2::t_c3b60775c4df67 186
+  s_4964e310483ef2::t_b85b05ad6fa394 191-199
+  s_4964e310483ef2::t_da309884987670 189
+  s_4964e310483ef2::t_698dfacd749464 113
+backend/app/pipeline.py
+  s_4964e310483ef2::t_a4cc2eb437cb28 152-158
+  s_4964e310483ef2::t_052f09627b0e82 75-78
+  s_4964e310483ef2::t_53790586e82342 128-132,134-150
+  s_4964e310483ef2::t_40010fe5ce44b4 1-19,21-74,79-127,133,151,159-247
+  s_4964e310483ef2::t_d51ca5e3159b08 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "042cdab652664b387769deb684b0f50ed702e891",
+  "prompts": {},
+  "sessions": {
+    "s_4964e310483ef2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "50da497f-fcd1-4068-91b3-2daecbdadfc0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
