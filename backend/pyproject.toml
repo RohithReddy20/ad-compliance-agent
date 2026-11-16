@@ -1,0 +1,20 @@
+[project]
+name = "ad-compliance-agent"
+version = "0.1.0"
+description = "FDA/FTC compliance reviewer for telehealth ads (text, image, video) with an eval harness"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "openai>=1.60",
+    "pydantic>=2.8",
+    "python-dotenv>=1.0",
+    "python-multipart>=0.0.9",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
