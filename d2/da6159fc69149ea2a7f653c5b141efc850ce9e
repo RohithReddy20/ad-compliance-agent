@@ -1,0 +1,42 @@
+data/golden/fda_letters.jsonl
+  s_4964e310483ef2::t_3fd7ea06d06a31 1-6
+data/golden/diverse_violations.jsonl
+  s_4964e310483ef2::t_e758632625cc53 1-7
+data/golden/real_videos.jsonl
+  s_4964e310483ef2::t_b712ef159742cb 1-4
+backend/evals/run_eval.py
+  s_4964e310483ef2::t_e60458435134c8 161-168
+  s_4964e310483ef2::t_4f8d5b9a75a7f8 248-250
+  s_4964e310483ef2::t_46e7ea76d0f9f8 233-242
+  s_4964e310483ef2::t_ddfb0aa27141ce 128
+  s_4964e310483ef2::t_c89592204decaa 101-107
+  s_4964e310483ef2::t_47098beab88050 45-47
+  s_4964e310483ef2::t_b3910b71c5cafd 89-95
+  s_4964e310483ef2::t_5a99bd311d68a9 1-44,48-88,96-100,108-127,129-160,169-232,243-247,251-260
+data/golden/real_media.jsonl
+  s_4964e310483ef2::t_091704dbd1adf0 2-3
+  s_4964e310483ef2::t_7fd7da997f35f6 1
+  s_4964e310483ef2::t_136f02a9bfa7a2 4-5
+backend/evals/scoring.py
+  s_4964e310483ef2::t_21c4b24141423f 18-27,29
+  s_4964e310483ef2::t_6b9be42fc8a27a 1-17,28,30-81,96-114,120-218,226-257
+  s_4964e310483ef2::t_205884b574c059 219-225
+  s_4964e310483ef2::t_ba0ee02e0a5480 115-119
+  s_4964e310483ef2::t_e17acc20cb9bcb 82-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d2da6159fc69149ea2a7f653c5b141efc850ce9e",
+  "prompts": {},
+  "sessions": {
+    "s_4964e310483ef2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "50da497f-fcd1-4068-91b3-2daecbdadfc0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
