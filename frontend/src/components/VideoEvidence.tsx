@@ -1,7 +1,8 @@
 import { useMemo, useState, type RefObject } from "react";
 import { mediaUrl } from "../api";
-import { CATEGORY_LABEL, CHANNEL_LABEL, fmtRange, fmtTime } from "../lib";
-import type { Channel, Finding, Frame } from "../types";
+import { CATEGORY_LABEL, CHANNEL_LABEL, fmtRange, fmtTime, truncate } from "../lib";
+import type { Channel, Finding, Frame, TranscriptSegment } from "../types";
+import { flaggedSegments } from "./Report";
 import { IconPause, IconPlay } from "./ui";
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   playing: boolean;
   findings: Finding[]; // indexed as in the report
   frames: Frame[];
+  segments: TranscriptSegment[];
   activeFinding: number | null;
   onSeek: (t: number) => void;
   onSelectFinding: (i: number) => void;
@@ -22,6 +24,7 @@ interface Props {
 
 const LANES: Channel[] = ["audio", "on_screen_text", "visual", "copy"];
 
+/** The video, the line being spoken, and a timeline of what the agent looked at and flagged. */
 export function VideoEvidence(p: Props) {
   const { duration } = p;
   const [hoverFrame, setHoverFrame] = useState<Frame | null>(null);
@@ -43,6 +46,10 @@ export function VideoEvidence(p: Props) {
     return out;
   }, [duration]);
 
+  const flagged = useMemo(() => flaggedSegments(p.segments, p.findings), [p.segments, p.findings]);
+  const nowIdx = p.segments.findIndex((s) => p.currentTime >= s.start && p.currentTime < s.end);
+  const nowFlag = nowIdx >= 0 ? flagged[nowIdx] : null;
+
   const pos = (t: number) => `${Math.max(0, Math.min(100, (t / (duration || 1)) * 100))}%`;
 
   const seekFromEvent = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -58,7 +65,7 @@ export function VideoEvidence(p: Props) {
   };
 
   return (
-    <div className="card">
+    <div className="video-stage">
       <div className="player">
         <video
           ref={p.videoRef}
@@ -71,10 +78,18 @@ export function VideoEvidence(p: Props) {
           onPause={() => p.onPlaying(false)}
         />
       </div>
+
+      {p.segments.length > 0 && (
+        <div className={`caption ${nowFlag ? `flagged sev-${nowFlag.severity}` : ""}`} aria-live="off">
+          <span className="caption-label">{nowFlag ? CATEGORY_LABEL[nowFlag.category] : "Spoken now"}</span>
+          <span className="caption-text">{nowIdx >= 0 ? p.segments[nowIdx].text : "No speech at this moment."}</span>
+        </div>
+      )}
+
       <div className="timeline">
         <div className="tl-controls">
           <button className="tl-play" onClick={toggle} aria-label={p.playing ? "Pause" : "Play"}>
-            {p.playing ? <IconPause size={13} /> : <IconPlay size={13} />}
+            {p.playing ? <IconPause size={14} /> : <IconPlay size={14} />}
           </button>
           <span className="tl-time tnum">
             {fmtTime(p.currentTime)} / {fmtTime(duration)}
@@ -90,8 +105,7 @@ export function VideoEvidence(p: Props) {
               <i className="sev-dot sev-low" /> Low
             </span>
             <span>
-              <i style={{ width: 2, height: 10, background: "var(--ink-2)", display: "inline-block" }} /> Frame
-              examined
+              <i className="pin-mark" /> Frame the agent examined
             </span>
           </div>
         </div>
@@ -124,6 +138,8 @@ export function VideoEvidence(p: Props) {
                   style={{ left: pos(f.t) }}
                   onMouseEnter={() => setHoverFrame(f)}
                   onMouseLeave={() => setHoverFrame(null)}
+                  onFocus={() => setHoverFrame(f)}
+                  onBlur={() => setHoverFrame(null)}
                   onClick={(e) => {
                     e.stopPropagation();
                     p.onSeek(f.t);
@@ -134,10 +150,7 @@ export function VideoEvidence(p: Props) {
               {hoverFrame && (
                 <div className="tl-tip" style={{ left: pos(hoverFrame.t) }}>
                   <img src={mediaUrl(hoverFrame.path) ?? ""} alt="" />
-                  <b className="mono" style={{ fontSize: 11 }}>
-                    {fmtTime(hoverFrame.t)}
-                  </b>{" "}
-                  {hoverFrame.reason}
+                  <b className="tnum">{fmtTime(hoverFrame.t)}</b> {hoverFrame.reason}
                 </div>
               )}
             </div>
@@ -160,25 +173,25 @@ export function VideoEvidence(p: Props) {
                         top: LANE_PAD + row * (BAR_H + BAR_GAP),
                         height: BAR_H,
                         left: pos(ts[0]),
-                        width: `max(6px, calc(${pos(ts[1])} - ${pos(ts[0])}))`,
+                        width: `max(8px, calc(${pos(ts[1])} - ${pos(ts[0])}))`,
                       }}
                       onMouseEnter={() => setHoverFinding(i)}
                       onMouseLeave={() => setHoverFinding(null)}
+                      onFocus={() => setHoverFinding(i)}
+                      onBlur={() => setHoverFinding(null)}
                       onClick={(e) => {
                         e.stopPropagation();
                         p.onSelectFinding(i);
                       }}
-                      aria-label={`${CATEGORY_LABEL[f.category]} at ${fmtRange(ts)}`}
+                      aria-label={`${CATEGORY_LABEL[f.category]}, ${f.severity} severity, ${fmtRange(ts)}`}
                     />
                   );
                 })}
                 {hoverFinding !== null && lane.items.some((x) => x.i === hoverFinding) && (
-                  <div className="tl-tip" style={{ left: pos(p.findings[hoverFinding].timestamp_s![0]), width: 250 }}>
+                  <div className="tl-tip wide" style={{ left: pos(p.findings[hoverFinding].timestamp_s![0]) }}>
                     <b>{CATEGORY_LABEL[p.findings[hoverFinding].category]}</b>
-                    <div className="mono" style={{ fontSize: 10.5, opacity: 0.75, margin: "2px 0 4px" }}>
-                      {fmtRange(p.findings[hoverFinding].timestamp_s!)}
-                    </div>
-                    <span style={{ opacity: 0.9 }}>“{truncate(p.findings[hoverFinding].claim, 110)}”</span>
+                    <div className="tnum tip-time">{fmtRange(p.findings[hoverFinding].timestamp_s!)}</div>
+                    <span>“{truncate(p.findings[hoverFinding].claim, 110)}”</span>
                   </div>
                 )}
               </div>
@@ -191,11 +204,11 @@ export function VideoEvidence(p: Props) {
   );
 }
 
-const AXIS_H = 18;
-const FRAMES_H = 20;
-const BAR_H = 12;
-const BAR_GAP = 3;
-const LANE_PAD = 4;
+const AXIS_H = 20;
+const FRAMES_H = 24;
+const BAR_H = 14;
+const BAR_GAP = 4;
+const LANE_PAD = 5;
 const laneHeight = (rows: number) => LANE_PAD * 2 + rows * BAR_H + (rows - 1) * BAR_GAP;
 
 /** Greedy interval packing so overlapping findings in one channel stack instead of hiding each other. */
@@ -216,5 +229,3 @@ function pack(findings: Finding[], channel: Channel) {
   });
   return { channel, items: placed, rows: Math.max(1, rowEnds.length) };
 }
-
-export const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);

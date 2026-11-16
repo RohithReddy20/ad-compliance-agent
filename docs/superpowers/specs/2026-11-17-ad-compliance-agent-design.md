@@ -63,8 +63,15 @@ FDA warning-letter quotes (DirectMeds, Hims, BlueChew…), FDA/FTC/NAD cases cov
 Reports for golden cases are also cached at `runs/reports/<ad_id>.json` so the UI can show the last review instantly.
 
 ## UI (React)
-- **Review:** pick a golden case or upload/paste an ad → live stage progress → report: verdict badge, video player with finding markers on the timeline (click to seek), findings list (category, claim, rule, severity, channel, frame thumbnail, suggested fix), transcript with flagged spans, and the golden labels side by side for golden cases.
-- **Evals:** scorecard (recall, precision, verdict accuracy, false flags on controls, timestamp hit rate), per-category recall bars, per-case table (missed / false flags), deltas vs the previous run with regressions in red, "Run evals" button with progress.
+Three screens, each built round the one question a reviewer has on it.
+- **Ad library** (`#/`): every golden ad as a card (video poster, image, or opening lines of the copy) with the expected verdict beside the agent's last verdict. Filter by format, search, or start a new ad.
+- **Review workspace** (`#/review/<id>`, `#/review/new`): the answer first, then the evidence.
+  - Status strip across the top: not reviewed / live stage progress / verdict with summary and the golden-label check.
+  - Left, fixed: the ad. Video with the line being spoken and a timeline (frames the agent examined, findings per channel; select to seek); image; or copy with flagged passages underlined.
+  - Right, scrolling: tabs for Findings (one row each, the open one shows claim, suggested rewrite, rationale, rule, frame), Golden labels, Transcript and Case notes. J / K steps through findings.
+- **Evals** (`#/evals`): the gate result as the headline; the three gate metrics large (must-catch recall, verdict accuracy, false flags on clean ads) with deltas; supporting metrics; results by ad (filter to those needing attention, expand a row for missed and false flags); recall by category; run history.
+
+Theme: a puppet-maker's workbench (bone, oxblood, soot on a grey studio wall). The "Inspector" puppet shows state on its face: reading while a review runs, then the verdict. Materials are decoration only; text contrast, focus rings, keyboard access and plain labels come first.
 
 ## Left to the builder
 Prompt wording, frame-picker heuristics, UI visual details, concurrency limits.

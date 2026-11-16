@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import { IconAlert, IconCheck, IconPlay, IconX, VerdictBadge } from "../components/ui";
+import { Inspector } from "../components/Inspector";
+import { IconArrow, IconCheck, IconChevron, IconPlay, IconX, VerdictBadge } from "../components/ui";
 import { MODALITY_LABEL, categoryLabel, pct } from "../lib";
 import type { CaseWithAsset, EvalProgress, EvalRun, EvalRunSummary } from "../types";
 
@@ -69,152 +70,155 @@ export function EvalsPage({ cases, navigate }: Props) {
 
   const titles = useMemo(() => new Map(cases.map((c) => [c.id, c.title])), [cases]);
   const isLatest = !selectedRun || selectedRun === history[0]?.run_id;
+  const nReg = run?.regressions.length ?? 0;
+
+  const headline = running
+    ? "Running the golden set…"
+    : !run
+      ? "Evaluation"
+      : nReg
+        ? `${nReg} regression${nReg > 1 ? "s" : ""} against the baseline`
+        : run.baseline_run_id
+          ? "No regressions against the baseline"
+          : "First run, nothing to compare against yet";
 
   return (
-    <div className="evals">
-      <div className="evals-inner">
-        <div className="evals-head">
-          <div>
-            <div className="section-label">Eval harness · golden set</div>
-            <h1>Evaluation</h1>
-            {run && (
-              <div className="meta-row">
-                <span className="mono">{run.run_id}</span>
-                <span className="sep" />
-                <span>{fmtDate(run.created_at)}</span>
-                <span className="sep" />
-                <span className="mono">{run.model}</span>
-                <span className="sep" />
-                <span className="tnum">{run.n_cases} cases</span>
-                {run.baseline_run_id && (
-                  <>
-                    <span className="sep" />
-                    <span>
-                      vs baseline <span className="mono">{run.baseline_run_id}</span>
-                    </span>
-                  </>
-                )}
-                {!isLatest && (
-                  <button className="btn ghost" style={{ height: 24 }} onClick={() => setSelectedRun(null)}>
-                    Back to latest
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 16 }}>
-            {running && progress && (
-              <div className="progress">
+    <main className="page" id="main">
+      <header className={`page-head gate-head ${run && !running ? (nReg ? "bad" : "good") : ""}`}>
+        <Inspector size={84} bust mood={running ? "reading" : !run ? "idle" : nReg ? "non_compliant" : "compliant"} />
+        <div>
+          <h1>{headline}</h1>
+          {run ? (
+            <div className="meta-row">
+              <span className="kind">
+                Run <b className="tnum">{run.run_id}</b>
+              </span>
+              <span>{fmtDate(run.created_at)}</span>
+              <span>{run.model}</span>
+              <span className="tnum">{run.n_cases} cases</span>
+              {run.baseline_run_id && (
                 <span>
-                  Running <span className="tnum">{progress.done}</span> / <span className="tnum">{progress.total}</span>{" "}
-                  cases…
+                  Baseline <span className="tnum">{run.baseline_run_id}</span>
                 </span>
-                <div className="progress-track">
-                  <div
-                    className="progress-fill"
-                    style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 4}%` }}
-                  />
-                </div>
-              </div>
-            )}
-            <button className="btn primary" onClick={startRun} disabled={running}>
-              <IconPlay size={12} /> {running ? "Running…" : "Run evals"}
-            </button>
-          </div>
+              )}
+              {!isLatest && (
+                <button className="btn small" onClick={() => setSelectedRun(null)}>
+                  Back to the latest run
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="lede">Scores the agent on every ad in the golden set, then compares with the last run.</p>
+          )}
         </div>
-
-        {progress?.error && <div className="error-box">Eval run failed: {progress.error}</div>}
-        {error && <div className="error-box">{error}</div>}
-        {loading && <div className="loading">Loading…</div>}
-        {!loading && !run && !error && (
-          <div className="card empty">
-            <h3>No eval runs yet</h3>
-            <p>Run the harness over the golden set to get recall, precision and verdict accuracy.</p>
-          </div>
-        )}
-
-        {run && (
-          <>
-            {run.regressions.length > 0 && (
-              <div className="regress fade-in">
-                <IconAlert size={18} />
-                <div>
-                  <b>Regression vs baseline</b>
-                  <ul>
-                    {run.regressions.map((r) => (
-                      <li key={r}>{r}</li>
-                    ))}
-                  </ul>
-                </div>
+        <div className="page-actions">
+          {running && progress && (
+            <div className="progress" role="status">
+              <span>
+                <span className="tnum">{progress.done}</span> of <span className="tnum">{progress.total}</span> cases done
+              </span>
+              <div className="progress-track">
+                <div
+                  className="progress-fill"
+                  style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 4}%` }}
+                />
               </div>
-            )}
+            </div>
+          )}
+          <button className="btn primary" onClick={startRun} disabled={running}>
+            <IconPlay size={12} /> {running ? "Running…" : "Run evals"}
+          </button>
+        </div>
+      </header>
 
-            <Kpis run={run} />
+      {progress?.error && (
+        <div className="error-box" role="alert">
+          The eval run failed: {progress.error}
+        </div>
+      )}
+      {error && (
+        <div className="error-box" role="alert">
+          {error}
+        </div>
+      )}
+      {loading && <div className="loading">Loading…</div>}
+      {!loading && !run && !error && (
+        <div className="panel-empty">
+          <h3>No eval runs yet</h3>
+          <p>Run the evals to get must-catch recall, verdict accuracy and false flags across the golden set.</p>
+        </div>
+      )}
 
-            <div className="evals-grid">
-              <div className="card">
+      {run && (
+        <>
+          {nReg > 0 && (
+            <div className="regress" role="alert">
+              <b>What got worse</b>
+              <ul>
+                {run.regressions.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <Scoreboard run={run} />
+
+          <div className="evals-grid">
+            <CaseResults run={run} titles={titles} onOpen={(id) => navigate(`#/review/${id}`)} />
+            <div className="evals-side">
+              <section className="card">
                 <div className="card-head">
                   <h2>Recall by category</h2>
-                  <span className="right">must-catch findings · n = support</span>
+                  <span className="right">share of must-catch findings found</span>
                 </div>
                 <CategoryBars run={run} />
-              </div>
-              <div className="card">
+              </section>
+              <section className="card">
                 <div className="card-head">
                   <h2>Run history</h2>
-                  <span className="right">click a run to inspect it</span>
+                  <span className="right">select a run to inspect it</span>
                 </div>
                 <History history={history} current={run.run_id} onPick={(id) => setSelectedRun(id)} />
-              </div>
+              </section>
             </div>
-
-            <div className="card">
-              <div className="card-head">
-                <h2>Per case</h2>
-                <span className="right">click a row to open the review</span>
-              </div>
-              <CaseTable run={run} titles={titles} onOpen={(id) => navigate(`#/review/${id}`)} />
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+          </div>
+        </>
+      )}
+    </main>
   );
 }
 
-// ---------------------------------------------------------------- KPIs
+// ---------------------------------------------------------------- scoreboard
 
 type Dir = "up" | "down";
-interface KpiDef {
+interface Metric {
   key: string;
   label: string;
   value: (r: EvalRun) => string;
   unit?: string;
   sub: (r: EvalRun) => string;
+  ratio?: (r: EvalRun) => number | null; // drawn as a meter when present
   better: Dir;
   fmtDelta: (d: number) => string;
 }
 
-const pts = (d: number) => `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d * 100).toFixed(1)} pts`;
+const sign = (d: number) => (d > 0 ? "+" : d < 0 ? "−" : "±");
+const pts = (d: number) => `${sign(d)}${Math.abs(d * 100).toFixed(1)} pts`;
+const fmtTokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
 
-const KPIS: KpiDef[] = [
+/** The three numbers the regression gate checks. */
+const GATE: Metric[] = [
   {
     key: "must_catch_recall",
     label: "Must-catch recall",
     value: (r) => pct(r.must_catch_recall),
+    ratio: (r) => r.must_catch_recall,
     sub: (r) => {
       const hit = r.cases.reduce((a, c) => a + c.must_catch_hit, 0);
       const tot = r.cases.reduce((a, c) => a + c.must_catch_total, 0);
-      return `${hit} of ${tot} regulator / high-severity findings`;
+      return `${hit} of ${tot} regulator or high-severity findings found`;
     },
-    better: "up",
-    fmtDelta: pts,
-  },
-  {
-    key: "precision",
-    label: "Precision",
-    value: (r) => pct(r.precision),
-    sub: () => "flags that match a golden finding",
     better: "up",
     fmtDelta: pts,
   },
@@ -222,76 +226,297 @@ const KPIS: KpiDef[] = [
     key: "verdict_accuracy",
     label: "Verdict accuracy",
     value: (r) => pct(r.verdict_accuracy),
-    sub: (r) => `${r.cases.filter((c) => c.verdict_ok).length} of ${r.cases.length} cases`,
+    ratio: (r) => r.verdict_accuracy,
+    sub: (r) => `${r.cases.filter((c) => c.verdict_ok).length} of ${r.cases.length} ads got the right verdict`,
     better: "up",
     fmtDelta: pts,
   },
   {
     key: "false_flags_on_compliant",
-    label: "False flags on controls",
+    label: "False flags on clean ads",
     value: (r) => String(r.false_flags_on_compliant),
-    sub: (r) => `${r.cases.filter((c) => c.expected_verdict === "compliant").length} compliant controls`,
+    sub: (r) => `across ${r.cases.filter((c) => c.expected_verdict === "compliant").length} compliant controls`,
     better: "down",
-    fmtDelta: (d) => `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d)}`,
+    fmtDelta: (d) => `${sign(d)}${Math.abs(d)}`,
+  },
+];
+
+const SUPPORTING: Metric[] = [
+  {
+    key: "precision",
+    label: "Precision",
+    value: (r) => pct(r.precision),
+    sub: () => "of flags match a golden finding",
+    better: "up",
+    fmtDelta: pts,
   },
   {
     key: "timestamp_hit_rate",
-    label: "Timestamp hit rate",
+    label: "Timestamps",
     value: (r) => pct(r.timestamp_hit_rate),
     sub: (r) => {
       const hit = r.cases.reduce((a, c) => a + c.timestamp_hits, 0);
       const tot = r.cases.reduce((a, c) => a + c.timestamp_total, 0);
-      return tot ? `${hit} of ${tot} video findings within ±2 s` : "no video findings scored";
+      return tot ? `${hit} of ${tot} video findings within 2 s` : "no video findings scored";
     },
     better: "up",
     fmtDelta: pts,
   },
   {
     key: "total_latency_s",
-    label: "Latency · tokens",
-    value: (r) => `${(r.total_latency_s / Math.max(1, r.n_cases)).toFixed(1)}`,
-    unit: "s / case",
-    sub: (r) => {
-      const t = (r.usage.input_tokens ?? 0) + (r.usage.output_tokens ?? 0);
-      return `${r.total_latency_s.toFixed(0)} s total · ${fmtTokens(t)} tokens`;
-    },
+    label: "Latency",
+    value: (r) => (r.total_latency_s / Math.max(1, r.n_cases)).toFixed(1),
+    unit: "s per ad",
+    sub: (r) => `${r.total_latency_s.toFixed(0)} s in total`,
     better: "down",
-    fmtDelta: (d) => `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d).toFixed(1)} s total`,
+    fmtDelta: (d) => `${sign(d)}${Math.abs(d).toFixed(1)} s total`,
   },
 ];
 
-function Kpis({ run }: { run: EvalRun }) {
-  const regressedText = run.regressions.join(" ").toLowerCase();
+function Delta({ run, m }: { run: EvalRun; m: Metric }) {
+  const d = run.deltas[m.key];
+  if (d === undefined || !run.baseline_run_id) return <span className="delta flat">No baseline to compare</span>;
+  const good = m.better === "up" ? d > 0 : d < 0;
+  const bad = m.better === "up" ? d < 0 : d > 0;
   return (
-    <div className="kpis">
-      {KPIS.map((k) => {
-        const d = run.deltas[k.key];
-        const hasDelta = d !== undefined && run.baseline_run_id;
-        const good = hasDelta && (k.better === "up" ? d > 0 : d < 0);
-        const bad = hasDelta && (k.better === "up" ? d < 0 : d > 0);
-        const regressed =
-          regressedText.includes(k.key) ||
-          (k.key === "false_flags_on_compliant" && regressedText.includes("false flag")) ||
-          (k.key === "must_catch_recall" && regressedText.includes("recall")) ||
-          (k.key === "verdict_accuracy" && regressedText.includes("verdict"));
-        return (
-          <div key={k.key} className={`card kpi ${regressed ? "regressed" : ""}`}>
-            <span className="label">{k.label}</span>
-            <span className="value">
-              {k.value(run)}
-              {k.unit && <small>{k.unit}</small>}
-            </span>
-            {hasDelta ? (
-              <span className={`delta ${good ? "good" : bad ? "bad" : "flat"}`}>
-                {d > 0 ? "▲" : d < 0 ? "▼" : "•"} {k.fmtDelta(d)}
-              </span>
-            ) : (
-              <span className="delta flat">{run.baseline_run_id ? "no delta reported" : "no baseline"}</span>
-            )}
-            <span className="sub">{k.sub(run)}</span>
+    <span className={`delta ${good ? "good" : bad ? "bad" : "flat"}`}>
+      {d > 0 ? "▲" : d < 0 ? "▼" : ""} {m.fmtDelta(d)} <span className="delta-vs">vs baseline</span>
+    </span>
+  );
+}
+
+function Scoreboard({ run }: { run: EvalRun }) {
+  const regressedText = run.regressions.join(" ").toLowerCase();
+  const regressed = (key: string) =>
+    regressedText.includes(key) ||
+    (key === "false_flags_on_compliant" && regressedText.includes("false flag")) ||
+    (key === "must_catch_recall" && regressedText.includes("recall")) ||
+    (key === "verdict_accuracy" && regressedText.includes("verdict"));
+  const tokens = (run.usage.input_tokens ?? 0) + (run.usage.output_tokens ?? 0);
+  return (
+    <section className="scoreboard" aria-label="Scores">
+      <div className="gate-metrics">
+        {GATE.map((m) => {
+          const ratio = m.ratio?.(run);
+          return (
+            <div key={m.key} className={`card metric ${regressed(m.key) ? "regressed" : ""}`}>
+              <span className="label">{m.label}</span>
+              <span className="value tnum">{m.value(run)}</span>
+              {ratio != null && (
+                <span className="meter" aria-hidden="true">
+                  <i style={{ width: `${ratio * 100}%` }} />
+                </span>
+              )}
+              <Delta run={run} m={m} />
+              <span className="sub">{m.sub(run)}</span>
+            </div>
+          );
+        })}
+      </div>
+      <dl className="card supporting">
+        {SUPPORTING.map((m) => (
+          <div key={m.key}>
+            <dt>{m.label}</dt>
+            <dd>
+              <b className="tnum">{m.value(run)}</b>
+              {m.unit && <span className="unit"> {m.unit}</span>}
+              <span className="sub">{m.sub(run)}</span>
+            </dd>
           </div>
-        );
-      })}
+        ))}
+        <div>
+          <dt>Tokens</dt>
+          <dd>
+            <b className="tnum">{fmtTokens(tokens)}</b>
+            <span className="sub">
+              {run.usage.cache_hits ? `${run.usage.cache_hits} calls served from cache` : "input and output combined"}
+            </span>
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------- results by case
+
+type Filter = "all" | "attention" | "clean";
+
+const needsAttention = (c: EvalRun["cases"][number]) =>
+  !c.verdict_ok || c.missed.length > 0 || c.false_flags.length > 0 || !!c.error;
+const badness = (c: EvalRun["cases"][number]) =>
+  (c.error ? 8 : 0) + (c.verdict_ok ? 0 : 4) + c.missed.length * 2 + c.false_flags.length;
+
+function CaseResults({
+  run,
+  titles,
+  onOpen,
+}: {
+  run: EvalRun;
+  titles: Map<string, string>;
+  onOpen: (id: string) => void;
+}) {
+  const [filter, setFilter] = useState<Filter>("all");
+  const [open, setOpen] = useState<string | null>(null);
+  const nAttention = run.cases.filter(needsAttention).length;
+  const counts: Record<Filter, number> = {
+    all: run.cases.length,
+    attention: nAttention,
+    clean: run.cases.length - nAttention,
+  };
+  const rows = run.cases
+    .filter((c) => filter === "all" || (filter === "attention") === needsAttention(c))
+    .sort((a, b) => badness(b) - badness(a) || a.case_id.localeCompare(b.case_id));
+
+  return (
+    <section className="card cases-card">
+      <div className="card-head">
+        <h2>Results by ad</h2>
+        <div className="seg" role="group" aria-label="Filter results">
+          {(
+            [
+              ["all", "All"],
+              ["attention", "Needs attention"],
+              ["clean", "Fully correct"],
+            ] as const
+          ).map(([id, label]) => (
+            <button key={id} className={filter === id ? "on" : ""} aria-pressed={filter === id} onClick={() => setFilter(id)}>
+              {label}
+              <span className="count">{counts[id]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table className="tbl cases-tbl">
+          <colgroup>
+            <col />
+            <col style={{ width: 146 }} />
+            <col style={{ width: 176 }} />
+            <col style={{ width: 96 }} />
+            <col style={{ width: 72 }} />
+            <col style={{ width: 92 }} />
+            <col style={{ width: 62 }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Ad</th>
+              <th>Expected</th>
+              <th>Agent said</th>
+              <th className="num">Must-catch</th>
+              <th className="num">Missed</th>
+              <th className="num">False flags</th>
+              <th>
+                <span className="sr-only">Details</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => {
+              const isOpen = open === c.case_id;
+              return (
+                <Fragment key={c.case_id}>
+                  <tr className={`${needsAttention(c) ? "bad-row" : ""} ${isOpen ? "open" : ""}`}>
+                    <td>
+                      <div className="row-id">
+                        <b className="tnum">{c.case_id}</b>
+                        <span className="muted small">{MODALITY_LABEL[c.modality]}</span>
+                      </div>
+                      <div className="row-title">{titles.get(c.case_id) ?? ""}</div>
+                      {c.error && <div className="row-error">Error: {c.error}</div>}
+                    </td>
+                    <td>
+                      <VerdictBadge verdict={c.expected_verdict} />
+                    </td>
+                    <td>
+                      <span className="said">
+                        {c.predicted_verdict ? <VerdictBadge verdict={c.predicted_verdict} /> : <span className="muted">No verdict</span>}
+                        <span className={`mark ${c.verdict_ok ? "ok" : "bad"}`} title={c.verdict_ok ? "Matches" : "Does not match"}>
+                          {c.verdict_ok ? <IconCheck size={13} /> : <IconX size={13} />}
+                        </span>
+                      </span>
+                    </td>
+                    <td className="num">
+                      {c.must_catch_total ? (
+                        <span className={c.must_catch_hit < c.must_catch_total ? "short" : ""}>
+                          {c.must_catch_hit}/{c.must_catch_total}
+                        </span>
+                      ) : (
+                        <span className="muted">none</span>
+                      )}
+                    </td>
+                    <td className={`num ${c.missed.length ? "short" : "muted"}`}>{c.missed.length}</td>
+                    <td className={`num ${c.false_flags.length ? "warn" : "muted"}`}>{c.false_flags.length}</td>
+                    <td className="num">
+                      <button
+                        className="icon-btn"
+                        aria-expanded={isOpen}
+                        aria-label={`${isOpen ? "Hide" : "Show"} details for ${c.case_id}`}
+                        onClick={() => setOpen(isOpen ? null : c.case_id)}
+                      >
+                        <IconChevron size={16} className={isOpen ? "down" : ""} />
+                      </button>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="detail-row">
+                      <td colSpan={7}>
+                        <div className="detail">
+                          <IssueList title="Missed" items={c.missed} kind="miss" empty="Nothing missed." />
+                          <IssueList title="False flags" items={c.false_flags} kind="ff" empty="No false flags." />
+                          <div className="detail-foot">
+                            <span className="muted tnum">
+                              {c.timestamp_total ? `${c.timestamp_hits}/${c.timestamp_total} timestamps within 2 s, ` : ""}
+                              {c.latency_s.toFixed(1)} s
+                            </span>
+                            <button className="btn small" onClick={() => onOpen(c.case_id)}>
+                              Open the review <IconArrow size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+            {!rows.length && (
+              <tr>
+                <td colSpan={7} className="muted">
+                  No ads in this group.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function IssueList({ title, items, kind, empty }: { title: string; items: string[]; kind: "miss" | "ff"; empty: string }) {
+  return (
+    <div className={`issues ${kind}`}>
+      <h4>
+        {title} <span className="tnum">{items.length}</span>
+      </h4>
+      {items.length ? (
+        <ul>
+          {items.map((s, i) => {
+            const idx = s.indexOf(": ");
+            const cat = idx > 0 ? s.slice(0, idx) : "";
+            const claim = idx > 0 ? s.slice(idx + 2) : s;
+            return (
+              <li key={i}>
+                {cat && <b>{categoryLabel(cat)}</b>}
+                <span>{claim}</span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="muted">{empty}</p>
+      )}
     </div>
   );
 }
@@ -302,14 +527,15 @@ function CategoryBars({ run }: { run: EvalRun }) {
   const rows = Object.entries(run.per_category).sort(
     (a, b) => (b[1].support > 0 ? 1 : 0) - (a[1].support > 0 ? 1 : 0) || a[1].recall - b[1].recall,
   );
-  if (!rows.length) return <div className="notes">No category data in this run.</div>;
+  if (!rows.length) return <p className="notes">No category data in this run.</p>;
   return (
     <div className="bars">
       {rows.map(([cat, { recall, support }]) => {
         const none = support === 0;
         return (
           <div key={cat} className={`bar-row ${none ? "nosupport" : ""}`}>
-            <span>{categoryLabel(cat)}</span>
+            <span className="bar-label">{categoryLabel(cat)}</span>
+            <span className="num tnum">{none ? "n/a" : pct(recall)}</span>
             <div className="bar-track">
               {!none && (
                 <div
@@ -318,8 +544,9 @@ function CategoryBars({ run }: { run: EvalRun }) {
                 />
               )}
             </div>
-            <span className="num">{none ? "—" : pct(recall)}</span>
-            <span className="n">n={Math.round(support)}</span>
+            <span className="n tnum">
+              {Math.round(support)} {Math.round(support) === 1 ? "finding" : "findings"}
+            </span>
           </div>
         );
       })}
@@ -338,50 +565,45 @@ function History({
   current: string;
   onPick: (id: string) => void;
 }) {
-  if (!history.length) return <div className="notes">No runs yet.</div>;
+  if (!history.length) return <p className="notes">No runs yet.</p>;
   const chrono = [...history].reverse();
   return (
     <>
       {history.length > 1 && <Spark runs={chrono} />}
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th>Run</th>
-            <th className="num">Recall</th>
-            <th className="num">Precision</th>
-            <th className="num">Verdict</th>
-          </tr>
-        </thead>
-        <tbody>
-          {history.map((h) => (
-            <tr
-              key={h.run_id}
-              className="link"
-              onClick={() => onPick(h.run_id)}
-              style={h.run_id === current ? { background: "var(--accent-soft)" } : undefined}
-            >
-              <td>
-                <div className="mono" style={{ fontWeight: h.run_id === current ? 600 : 400 }}>
-                  {h.run_id}
-                </div>
-                <div className="muted" style={{ fontSize: 11.5 }}>
-                  {fmtDate(h.created_at)} · {h.model}
-                </div>
-              </td>
-              <td className="num">{pct(h.must_catch_recall)}</td>
-              <td className="num">{pct(h.precision)}</td>
-              <td className="num">{pct(h.verdict_accuracy)}</td>
+      <div className="table-wrap history">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th className="num">Recall</th>
+              <th className="num">Precision</th>
+              <th className="num">Verdict</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {history.map((h) => (
+              <tr key={h.run_id} className={h.run_id === current ? "current" : ""}>
+                <td>
+                  <button className="run-pick" onClick={() => onPick(h.run_id)} aria-current={h.run_id === current}>
+                    <span className="run-id tnum">{h.run_id}</span>
+                    <span className="muted small">{fmtDate(h.created_at)}</span>
+                  </button>
+                </td>
+                <td className="num">{pct(h.must_catch_recall)}</td>
+                <td className="num">{pct(h.precision)}</td>
+                <td className="num">{pct(h.verdict_accuracy)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
 
 function Spark({ runs }: { runs: EvalRunSummary[] }) {
   const W = 520;
-  const H = 70;
+  const H = 76;
   const pad = 10;
   const all = runs.flatMap((r) => [r.must_catch_recall, r.precision, r.verdict_accuracy]);
   const lo = Math.max(0, Math.floor((Math.min(...all) - 0.05) * 10) / 10);
@@ -390,151 +612,49 @@ function Spark({ runs }: { runs: EvalRunSummary[] }) {
   const line = (k: "must_catch_recall" | "precision" | "verdict_accuracy") =>
     runs.map((r, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(r[k]).toFixed(1)}`).join(" ");
   const series = [
-    { k: "must_catch_recall" as const, c: "var(--accent)", label: "Recall" },
-    { k: "precision" as const, c: "#8a6d3b", label: "Precision" },
-    { k: "verdict_accuracy" as const, c: "var(--ink-3)", label: "Verdict" },
+    { k: "must_catch_recall" as const, c: "var(--red)", label: "Recall", dash: undefined },
+    { k: "precision" as const, c: "var(--amber-deep)", label: "Precision", dash: "6 4" },
+    { k: "verdict_accuracy" as const, c: "var(--soot)", label: "Verdict", dash: "2 4" },
   ];
   return (
-    <div style={{ padding: "10px 16px 4px", borderBottom: "1px solid var(--line)" }}>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="spark" preserveAspectRatio="none">
+    <figure className="spark-wrap">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="spark" preserveAspectRatio="none" role="img" aria-label="Recall, precision and verdict accuracy across runs">
         {[lo, (lo + 1) / 2, 1].map((g, k) => (
-          <line key={k} x1={pad} x2={W - pad} y1={y(g)} y2={y(g)} stroke="var(--line)" strokeDasharray={k === 1 ? "3 3" : undefined} />
+          <line key={k} x1={pad} x2={W - pad} y1={y(g)} y2={y(g)} stroke="var(--line)" vectorEffect="non-scaling-stroke" />
         ))}
         {series.map((s) => (
-          <path key={s.k} d={line(s.k)} fill="none" stroke={s.c} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+          <path
+            key={s.k}
+            d={line(s.k)}
+            fill="none"
+            stroke={s.c}
+            strokeWidth={2.2}
+            strokeDasharray={s.dash}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
         ))}
       </svg>
-      <div style={{ display: "flex", gap: 14, fontSize: 11.5, color: "var(--ink-3)", padding: "2px 0 6px" }}>
+      <figcaption className="spark-legend">
         {series.map((s) => (
-          <span key={s.k} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <i style={{ width: 12, height: 2, background: s.c, display: "inline-block" }} />
+          <span key={s.k}>
+            <svg width="22" height="6" aria-hidden="true">
+              <line x1="1" x2="21" y1="3" y2="3" stroke={s.c} strokeWidth="2.2" strokeDasharray={s.dash} strokeLinecap="round" />
+            </svg>
             {s.label}
           </span>
         ))}
-        <span style={{ marginLeft: "auto" }}>
-          {pct(lo)}–100% · oldest → latest
+        <span className="spark-range">
+          {pct(lo)} to 100%, oldest to latest
         </span>
-      </div>
-    </div>
+      </figcaption>
+    </figure>
   );
 }
-
-// ---------------------------------------------------------------- per-case table
-
-function CaseTable({
-  run,
-  titles,
-  onOpen,
-}: {
-  run: EvalRun;
-  titles: Map<string, string>;
-  onOpen: (id: string) => void;
-}) {
-  const rows = [...run.cases].sort(
-    (a, b) => badness(b) - badness(a) || a.case_id.localeCompare(b.case_id),
-  );
-  return (
-    <table className="tbl">
-      <thead>
-        <tr>
-          <th style={{ width: "25%" }}>Case</th>
-          <th>Expected → predicted</th>
-          <th className="num">Must-catch</th>
-          <th style={{ width: "22%" }}>Missed</th>
-          <th style={{ width: "20%" }}>False flags</th>
-          <th className="num">Timestamps</th>
-          <th className="num">Latency</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((c) => {
-          const bad = !c.verdict_ok || c.missed.length > 0 || c.false_flags.length > 0 || !!c.error;
-          return (
-            <tr key={c.case_id} className={`link ${bad ? "bad-row" : ""}`} onClick={() => onOpen(c.case_id)}>
-              <td>
-                <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-                  <span className="mono">{c.case_id}</span>
-                  <span className="muted" style={{ fontSize: 11.5 }}>
-                    {MODALITY_LABEL[c.modality]}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.35, marginTop: 2 }}>
-                  {titles.get(c.case_id) ?? ""}
-                </div>
-              </td>
-              <td>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-                  <VerdictBadge verdict={c.expected_verdict} />
-                  <span className="muted">→</span>
-                  {c.predicted_verdict ? <VerdictBadge verdict={c.predicted_verdict} /> : <span className="muted">—</span>}
-                  {c.verdict_ok ? (
-                    <IconCheck size={14} className="ok-mark" />
-                  ) : (
-                    <IconX size={14} className="x-mark" />
-                  )}
-                </div>
-                {c.error && (
-                  <div style={{ color: "var(--high)", fontSize: 12, marginTop: 4 }}>Error: {c.error}</div>
-                )}
-              </td>
-              <td className="num">
-                {c.must_catch_total ? (
-                  <>
-                    <span style={{ color: c.must_catch_hit < c.must_catch_total ? "var(--high)" : undefined }}>
-                      {c.must_catch_hit}/{c.must_catch_total}
-                    </span>
-                    <span className="mini">
-                      <i style={{ width: `${(c.must_catch_hit / c.must_catch_total) * 100}%` }} />
-                    </span>
-                  </>
-                ) : (
-                  <span className="muted">—</span>
-                )}
-              </td>
-              <td>
-                <IssueList items={c.missed} kind="miss" />
-              </td>
-              <td>
-                <IssueList items={c.false_flags} kind="ff" />
-              </td>
-              <td className="num">
-                {c.timestamp_total ? `${c.timestamp_hits}/${c.timestamp_total}` : <span className="muted">—</span>}
-              </td>
-              <td className="num">{c.latency_s.toFixed(1)}s</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-function IssueList({ items, kind }: { items: string[]; kind: "miss" | "ff" }) {
-  if (!items.length) return <span className="muted">—</span>;
-  return (
-    <ul className={`issue-list ${kind}`}>
-      {items.map((s, i) => {
-        const idx = s.indexOf(": ");
-        const cat = idx > 0 ? s.slice(0, idx) : "";
-        const claim = idx > 0 ? s.slice(idx + 2) : s;
-        return (
-          <li key={i} title={claim}>
-            {cat && <span className="k">{categoryLabel(cat)}: </span>}
-            <span>{claim.length > 90 ? `${claim.slice(0, 89)}…` : claim}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-const badness = (c: EvalRun["cases"][number]) =>
-  (c.error ? 8 : 0) + (c.verdict_ok ? 0 : 4) + c.missed.length * 2 + c.false_flags.length;
 
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
-
-const fmtTokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));

@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { USE_FIXTURES, api } from "./api";
+import { Inspector } from "./components/Inspector";
+import { IconPlus } from "./components/ui";
 import { EvalsPage } from "./pages/EvalsPage";
+import { LibraryPage } from "./pages/LibraryPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import type { CaseWithAsset, Health } from "./types";
 
-type Route = { page: "review"; caseId: string | null | undefined } | { page: "evals" };
+type Route = { page: "library" } | { page: "review"; caseId: string | null } | { page: "evals" };
 
 function parse(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean);
   if (parts[0] === "evals") return { page: "evals" };
   if (parts[0] === "review" && parts[1] === "new") return { page: "review", caseId: null };
   if (parts[0] === "review" && parts[1]) return { page: "review", caseId: decodeURIComponent(parts[1]) };
-  return { page: "review", caseId: undefined }; // pick a default once cases load
+  return { page: "library" };
 }
 
 export default function App() {
@@ -35,52 +38,51 @@ export default function App() {
     location.hash = hash;
   }, []);
 
-  // default selection: the first video case (the richest view)
-  useEffect(() => {
-    if (route.page === "review" && route.caseId === undefined && cases.length) {
-      const first = cases.find((c) => c.modality === "video") ?? cases[0];
-      history.replaceState(null, "", `#/review/${first.id}`);
-      setRoute({ page: "review", caseId: first.id });
-    }
-  }, [route, cases]);
+  const onAds = route.page !== "evals";
 
   return (
     <div className="app">
+      <a className="skip" href="#main">
+        Skip to content
+      </a>
       <header className="topbar">
-        <a className="brand" href="#/review">
+        <a className="brand" href="#/" aria-label="Ad Compliance Desk, home">
           <span className="brand-mark">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F5F4EF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12.5l4.5 4.5L19 7.5" />
-            </svg>
+            <Inspector size={36} />
           </span>
           <span className="brand-name">Ad Compliance Desk</span>
-          <span className="brand-sub">FDA · FTC</span>
         </a>
-        <nav className="nav">
-          <a href="#/review" className={route.page === "review" ? "active" : ""}>
-            Review
+        <nav className="nav" aria-label="Sections">
+          <a href="#/" aria-current={onAds ? "page" : undefined}>
+            Ads
           </a>
-          <a href="#/evals" className={route.page === "evals" ? "active" : ""}>
+          <a href="#/evals" aria-current={onAds ? undefined : "page"}>
             Evals
           </a>
         </nav>
         <div className="topbar-right">
-          {USE_FIXTURES && <span className="fixture-pill" title="VITE_USE_FIXTURES=1: data is canned, not from the API">Fixture data</span>}
-          <span className={`status-dot ${health === "down" ? "down" : health ? "ok" : ""}`} />
-          <span className="mono">
-            {health === "down" ? "API unreachable" : health ? health.model : "connecting…"}
+          {USE_FIXTURES && (
+            <span className="fixture-pill" title="VITE_USE_FIXTURES=1: data is canned, not from the API">
+              Fixture data
+            </span>
+          )}
+          <span className="api-status" title={health === "down" ? "The API is not reachable" : "Model reviewing the ads"}>
+            <span className={`status-dot ${health === "down" ? "down" : health ? "ok" : ""}`} />
+            {health === "down" ? "API unreachable" : health ? health.model : "Connecting…"}
           </span>
+          {route.page === "evals" || (route.page === "review" && route.caseId !== null) ? (
+            <a className="btn" href="#/review/new">
+              <IconPlus size={14} /> New ad
+            </a>
+          ) : null}
         </div>
       </header>
       {route.page === "evals" ? (
         <EvalsPage cases={cases} navigate={navigate} />
+      ) : route.page === "library" ? (
+        <LibraryPage cases={cases} casesError={casesError} />
       ) : (
-        <ReviewPage
-          cases={cases}
-          casesError={casesError}
-          selectedId={route.caseId}
-          navigate={navigate}
-        />
+        <ReviewPage cases={cases} casesError={casesError} selectedId={route.caseId} navigate={navigate} />
       )}
     </div>
   );

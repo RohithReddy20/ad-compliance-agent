@@ -164,3 +164,16 @@ export function compareGolden(gc: GoldenCase, findings: Finding[], verdict: Verd
     verdictOk: verdictMatches(gc.expected_verdict, verdict),
   };
 }
+
+export function shortCompany(company: string): string {
+  const dba = /\bdba\s+(.+)$/i.exec(company);
+  if (dba) return dba[1].trim();
+  return company.replace(/,?\s+(Inc\.|LLC|Ltd\.?)(?=\s|$)/g, "").replace(/\s+dba\s+.*/i, "").trim();
+}
+
+export const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+
+/** Library order: the richest views first. Prev / next in the workspace follows it. */
+export const MODALITY_ORDER: Modality[] = ["video", "image", "text"];
+export const inLibraryOrder = <T extends { modality: Modality; id: string }>(cases: T[]): T[] =>
+  MODALITY_ORDER.flatMap((m) => cases.filter((c) => c.modality === m));

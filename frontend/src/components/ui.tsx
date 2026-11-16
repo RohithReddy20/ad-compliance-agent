@@ -50,20 +50,9 @@ export const IconChevron = (p: IconProps) => svg(<path d="M9 6l6 6-6 6" />, p, 2
 export const IconShield = (p: IconProps) =>
   svg(<path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z" />, p, 2);
 
-const VERDICT_ICON: Record<Verdict, (p: IconProps) => ReactNode> = {
-  non_compliant: IconX,
-  needs_review: IconAlert,
-  compliant: IconCheck,
-};
-
-export function VerdictBadge({ verdict, size = "sm" }: { verdict: Verdict; size?: "sm" | "lg" }) {
-  const Icon = VERDICT_ICON[verdict];
-  return (
-    <span className={`verdict ${size} v-${verdict}`}>
-      {size === "lg" && <Icon size={15} />}
-      {VERDICT_LABEL[verdict]}
-    </span>
-  );
+/** A felt ball in the verdict colour, then the verdict in plain words. */
+export function VerdictBadge({ verdict }: { verdict: Verdict }) {
+  return <span className={`verdict v-${verdict}`}>{VERDICT_LABEL[verdict]}</span>;
 }
 
 export function SeverityTag({ severity }: { severity: Severity }) {

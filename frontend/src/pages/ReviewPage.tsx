@@ -1,10 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { CaseRail, shortCompany } from "../components/CaseRail";
-import { FindingCard, GoldenPanel, Stepper, Transcript, VerdictPanel } from "../components/Report";
-import { IconExternal, IconPlay, IconShield } from "../components/ui";
+import { EmptyStrip, FindingsList, GoldenTab, RunStrip, TranscriptTab, VerdictStrip } from "../components/Report";
+import { IconChevron, IconExternal, IconPlay } from "../components/ui";
 import { VideoEvidence } from "../components/VideoEvidence";
-import { SOURCE_LABEL, compareGolden, fmtTime, humanize, sortFindings, stagesFor } from "../lib";
+import {
+  MODALITY_LABEL,
+  MODALITY_ORDER,
+  SOURCE_LABEL,
+  compareGolden,
+  fmtTime,
+  humanize,
+  inLibraryOrder,
+  shortCompany,
+  sortFindings,
+  stagesFor,
+  truncate,
+} from "../lib";
 import type { CaseWithAsset, Finding, Modality, Report, ReviewRequest, Stage } from "../types";
 
 interface JobState {
@@ -18,39 +29,34 @@ interface JobState {
 interface Props {
   cases: CaseWithAsset[];
   casesError: string | null;
-  selectedId: string | null | undefined; // null = "New ad", undefined = not chosen yet
+  selectedId: string | null; // null = a new ad
   navigate: (hash: string) => void;
 }
 
 export function ReviewPage({ cases, casesError, selectedId, navigate }: Props) {
   const gc = useMemo(() => cases.find((c) => c.id === selectedId) ?? null, [cases, selectedId]);
 
+  if (selectedId === null) return <Workspace key="new" gc={null} cases={cases} navigate={navigate} />;
+  if (gc) return <Workspace key={gc.id} gc={gc} cases={cases} navigate={navigate} />;
   return (
-    <div className="review">
-      <CaseRail
-        cases={cases}
-        selectedId={selectedId ?? null}
-        onSelect={(id) => navigate(`#/review/${id}`)}
-        onNew={() => navigate("#/review/new")}
-        newActive={selectedId === null}
-      />
-      <main className="main">
-        {casesError && (
-          <div className="main-inner">
-            <div className="error-box">Could not load cases: {casesError}</div>
-          </div>
-        )}
-        {selectedId === undefined ? (
-          !casesError && <div className="loading">Loading cases…</div>
-        ) : selectedId === null ? (
-          <Workspace key="new" gc={null} />
-        ) : gc ? (
-          <Workspace key={gc.id} gc={gc} />
-        ) : (
-          !casesError && <div className="loading">Loading…</div>
-        )}
-      </main>
-    </div>
+    <main className="page" id="main">
+      <a className="back" href="#/">
+        <IconChevron size={14} className="flip" /> Ad library
+      </a>
+      {casesError ? (
+        <div className="error-box">Could not load the ads: {casesError}</div>
+      ) : cases.length ? (
+        <div className="panel-empty">
+          <h3>No ad with the id “{selectedId}”</h3>
+          <p>It may have been removed from the golden set.</p>
+          <a className="btn" href="#/">
+            Back to the ad library
+          </a>
+        </div>
+      ) : (
+        <div className="loading">Loading…</div>
+      )}
+    </main>
   );
 }
 
@@ -63,12 +69,24 @@ interface Upload {
   url: string | null;
 }
 
-function Workspace({ gc }: { gc: CaseWithAsset | null }) {
+type Tab = "findings" | "golden" | "transcript" | "notes";
+
+function Workspace({
+  gc,
+  cases,
+  navigate,
+}: {
+  gc: CaseWithAsset | null;
+  cases: CaseWithAsset[];
+  navigate: (hash: string) => void;
+}) {
   const [report, setReport] = useState<Report | null>(null);
   const [loadingReport, setLoadingReport] = useState(!!gc);
   const [job, setJob] = useState<JobState | null>(null);
   const [now, setNow] = useState(Date.now());
   const [upload, setUpload] = useState<Upload | null>(null);
+  const [lastReq, setLastReq] = useState<ReviewRequest | null>(null);
+  const [tab, setTab] = useState<Tab>("findings");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -77,6 +95,19 @@ function Workspace({ gc }: { gc: CaseWithAsset | null }) {
   const [active, setActive] = useState<number | null>(null);
 
   const modality: Modality = gc?.modality ?? upload?.modality ?? "text";
+  const isVideo = modality === "video";
+
+  const ordered = useMemo(() => {
+    if (!report) return [];
+    return sortFindings(report.findings).map((f) => ({ f, i: report.findings.indexOf(f) }));
+  }, [report]);
+
+  // open the most severe finding as soon as a report arrives, so the panel is never a wall of closed rows
+  const showReport = useCallback((r: Report | null) => {
+    setReport(r);
+    const first = r ? sortFindings(r.findings)[0] : undefined;
+    setActive(r && first ? r.findings.indexOf(first) : null);
+  }, []);
 
   // cached report
   useEffect(() => {
@@ -84,13 +115,13 @@ function Workspace({ gc }: { gc: CaseWithAsset | null }) {
     let live = true;
     api
       .getReport(gc.id)
-      .then((r) => live && setReport(r))
-      .catch(() => live && setReport(null))
+      .then((r) => live && showReport(r))
+      .catch(() => live && showReport(null))
       .finally(() => live && setLoadingReport(false));
     return () => {
       live = false;
     };
-  }, [gc]);
+  }, [gc, showReport]);
 
   // poll the job every second
   const running = job !== null && job.error === null && job.stage !== "done";
@@ -105,8 +136,8 @@ function Workspace({ gc }: { gc: CaseWithAsset | null }) {
         } else {
           setJob((s) => s && { ...s, stage: j.stage });
           if (j.stage === "done" && j.report) {
-            setReport(j.report);
-            setActive(null);
+            showReport(j.report);
+            setTab("findings");
           }
         }
       } catch (e) {
@@ -114,9 +145,10 @@ function Workspace({ gc }: { gc: CaseWithAsset | null }) {
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [running, job?.jobId]); // eslint-disable-line react-hooks/exhaustive-deps -- re-arm only per job
+  }, [running, job?.jobId, showReport]); // eslint-disable-line react-hooks/exhaustive-deps -- re-arm only per job
 
   const start = async (req: ReviewRequest) => {
+    setLastReq(req);
     setJob({ jobId: "", adId: "", stage: "queued", error: null, started: Date.now() });
     try {
       const j = await api.createReview(req);
@@ -132,21 +164,33 @@ function Workspace({ gc }: { gc: CaseWithAsset | null }) {
     setCurrentTime(t);
   }, []);
 
-  const select = useCallback((i: number) => setActive(i), []);
-  const selectAndSeek = useCallback(
-    (i: number) => {
+  /** Select a finding, show it in the list, and (for video) move to the moment it happens. */
+  const pick = useCallback(
+    (i: number | null) => {
       setActive(i);
+      if (i === null) return;
+      setTab("findings");
       const ts = report?.findings[i]?.timestamp_s;
-      if (ts) seek(ts[0]);
+      if (isVideo && ts) seek(ts[0]);
     },
-    [report, seek],
+    [report, isVideo, seek],
   );
 
-  const ordered = useMemo(() => {
-    if (!report) return [];
-    const sorted = sortFindings(report.findings);
-    return sorted.map((f) => ({ f, i: report.findings.indexOf(f) }));
-  }, [report]);
+  // J / K step through findings, the way a reviewer works down a list
+  useEffect(() => {
+    if (!ordered.length) return;
+    const on = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.target as HTMLElement).closest("input, textarea, select")) return;
+      const k = e.key.toLowerCase();
+      if (k !== "j" && k !== "k") return;
+      const at = ordered.findIndex((x) => x.i === active);
+      const next = k === "j" ? Math.min(ordered.length - 1, at + 1) : Math.max(0, at < 0 ? 0 : at - 1);
+      pick(ordered[next].i);
+    };
+    addEventListener("keydown", on);
+    return () => removeEventListener("keydown", on);
+  }, [ordered, active, pick]);
 
   const cmp = useMemo(
     () => (gc && report ? compareGolden(gc, report.findings, report.verdict) : null),
@@ -155,36 +199,74 @@ function Workspace({ gc }: { gc: CaseWithAsset | null }) {
 
   const assetSrc = gc ? gc.asset_url : upload?.url ?? null;
   const copy = gc ? (gc.modality === "text" ? gc.ad_content : null) : upload?.modality === "text" ? upload.text : null;
-  const showRunPanel = job !== null && (running || job.error !== null);
+  const showRun = job !== null && (running || job.error !== null);
   const showUploadForm = !gc && !job && !report;
+  const runCase = () => (gc ? start({ kind: "case", case_id: gc.id }) : lastReq ? start(lastReq) : undefined);
+
+  const tabs: { id: Tab; label: string; count?: string }[] = [
+    { id: "findings", label: "Findings", count: report ? String(report.findings.length) : undefined },
+    ...(gc && cmp
+      ? [{ id: "golden" as const, label: "Golden labels", count: `${cmp.mustCatchHit}/${cmp.mustCatchTotal}` }]
+      : []),
+    ...(isVideo && report && report.transcript.length ? [{ id: "transcript" as const, label: "Transcript" }] : []),
+    ...(gc && (gc.notes || gc.modality !== "text") ? [{ id: "notes" as const, label: "Case notes" }] : []),
+  ];
+  const tabNow = tabs.some((t) => t.id === tab) ? tab : "findings";
 
   return (
-    <div className="main-inner">
-      {gc ? (
-        <CaseHeader gc={gc} hasReport={!!report} running={running} onRun={() => start({ kind: "case", case_id: gc.id })} />
-      ) : (
-        <div className="case-head">
-          <div>
-            <div className="section-label">New ad</div>
-            <h1>{upload?.file?.name ?? (upload ? "Pasted ad copy" : "Review an ad before it ships")}</h1>
-            <div className="meta-row">Upload a video or image, or paste ad copy. Nothing is published.</div>
+    <main className={`ws ${showUploadForm ? "ws-form" : ""}`} id="main">
+      <header className="ws-head">
+        <div className="ws-crumbs">
+          <a className="back" href="#/">
+            <IconChevron size={14} className="flip" /> Ad library
+          </a>
+          {gc && <CaseSwitcher cases={cases} id={gc.id} onPick={(id) => navigate(`#/review/${id}`)} />}
+        </div>
+        <div className="ws-title">
+          <div className="ws-title-text">
+            <h1>{gc ? gc.title : upload?.file?.name ?? (upload ? "Pasted ad copy" : "Review an ad before it ships")}</h1>
+            {gc ? (
+              <div className="meta-row">
+                <span className="kind">
+                  {SOURCE_LABEL[gc.source_type] ?? humanize(gc.source_type)}
+                  <b className="tnum">{gc.id}</b>
+                </span>
+                <span>{shortCompany(gc.company)}</span>
+                <span>{humanize(gc.vertical)}</span>
+                {gc.duration_s != null && <span className="tnum">{fmtTime(gc.duration_s)} long</span>}
+                {gc.source_url && (
+                  <a href={gc.source_url} target="_blank" rel="noreferrer">
+                    Source <IconExternal size={12} />
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="meta-row">
+                <span>Upload a video or image, or paste ad copy. Nothing is published.</span>
+              </div>
+            )}
           </div>
-          {(report || job?.error) && (
-            <div className="case-head-actions">
+          <div className="ws-actions">
+            {!gc && (report || job?.error) && (
               <button
                 className="btn"
                 onClick={() => {
-                  setReport(null);
+                  showReport(null);
                   setJob(null);
                   setUpload(null);
                 }}
               >
                 Start over
               </button>
-            </div>
-          )}
+            )}
+            {report && !showRun && (gc || lastReq) && (
+              <button className="btn" onClick={runCase}>
+                <IconPlay size={11} /> Run again
+              </button>
+            )}
+          </div>
         </div>
-      )}
+      </header>
 
       {showUploadForm ? (
         <NewAdForm
@@ -195,206 +277,179 @@ function Workspace({ gc }: { gc: CaseWithAsset | null }) {
           }}
         />
       ) : (
-        <div className="workspace">
-          <div className="col sticky">
-            {modality === "video" && assetSrc && (
-              <VideoEvidence
-                src={assetSrc}
-                videoRef={videoRef}
-                duration={duration || report?.transcript.at(-1)?.end || 0}
-                currentTime={currentTime}
-                playing={playing}
-                findings={report?.findings ?? []}
-                frames={report?.frames ?? []}
-                activeFinding={active}
-                onSeek={seek}
-                onSelectFinding={selectAndSeek}
-                onTime={setCurrentTime}
-                onDuration={setDuration}
-                onPlaying={setPlaying}
-              />
-            )}
-            {modality === "image" && assetSrc && (
-              <div className="card">
-                <div className="card-head">
-                  <h2>Image ad</h2>
-                </div>
-                <div className="image-asset" style={{ borderRadius: "0 0 8px 8px" }}>
+        <>
+          {showRun && job ? (
+            <RunStrip
+              stages={stagesFor(modality)}
+              current={job.stage}
+              error={job.error}
+              elapsed={(now - job.started) / 1000}
+              jobId={job.jobId}
+              onRetry={() => void runCase()}
+            />
+          ) : report ? (
+            <VerdictStrip report={report} cmp={cmp} onShowGolden={() => setTab("golden")} />
+          ) : (
+            <EmptyStrip modality={modality} loading={loadingReport} onRun={() => void runCase()} />
+          )}
+
+          <div className="ws-body">
+            <section className="stage" aria-label="The ad">
+              {isVideo && assetSrc && (
+                <VideoEvidence
+                  src={assetSrc}
+                  videoRef={videoRef}
+                  duration={duration || report?.transcript.at(-1)?.end || 0}
+                  currentTime={currentTime}
+                  playing={playing}
+                  findings={report?.findings ?? []}
+                  frames={report?.frames ?? []}
+                  segments={report?.transcript ?? []}
+                  activeFinding={active}
+                  onSeek={seek}
+                  onSelectFinding={pick}
+                  onTime={setCurrentTime}
+                  onDuration={setDuration}
+                  onPlaying={setPlaying}
+                />
+              )}
+              {modality === "image" && assetSrc && (
+                <div className="image-asset">
                   <img src={assetSrc} alt={gc?.title ?? "Uploaded ad"} />
                 </div>
-              </div>
-            )}
-            {copy !== null && (
-              <div className="card">
-                <div className="card-head">
-                  <h2>Ad copy</h2>
-                  {report && <span className="right">flagged passages are highlighted</span>}
+              )}
+              {copy !== null && (
+                <div className="copy-stage">
+                  <div className="stage-head">
+                    <h2>Ad copy</h2>
+                    {report && report.findings.length > 0 && (
+                      <span className="muted">Flagged passages are underlined. Select one to see why.</span>
+                    )}
+                  </div>
+                  <HighlightedCopy text={copy} findings={report?.findings ?? []} active={active} onSelect={pick} />
                 </div>
-                <HighlightedCopy text={copy} findings={report?.findings ?? []} active={active} onSelect={select} />
-              </div>
-            )}
-            {modality === "video" && report && report.transcript.length > 0 && (
-              <Transcript
-                segments={report.transcript}
-                findings={report.findings}
-                currentTime={currentTime}
-                follow={playing}
-                onSeek={seek}
-              />
-            )}
-            {gc && gc.modality !== "text" && <SourceContent gc={gc} />}
-          </div>
+              )}
+            </section>
 
-          <div className="col">
-            {showRunPanel && job && (
-              <div className="card run-panel fade-in">
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <IconShield size={16} />
-                  <b>{job.error ? "Review failed" : "Reviewing…"}</b>
-                  <span className="muted mono" style={{ marginLeft: "auto" }}>
-                    {job.jobId ? `job ${job.jobId}` : "starting"}
+            <aside className="panel" aria-label="Review details">
+              <div className="tabs" role="tablist" aria-label="Review details">
+                {tabs.map((t) => (
+                  <button
+                    key={t.id}
+                    role="tab"
+                    id={`tab-${t.id}`}
+                    aria-selected={tabNow === t.id}
+                    aria-controls="panel-body"
+                    className={tabNow === t.id ? "on" : ""}
+                    onClick={() => setTab(t.id)}
+                  >
+                    {t.label}
+                    {t.count !== undefined && <span className="count tnum">{t.count}</span>}
+                  </button>
+                ))}
+                {tabNow === "findings" && ordered.length > 1 && (
+                  <span className="tabs-hint">
+                    <kbd>J</kbd> <kbd>K</kbd> to step through
                   </span>
-                </div>
-                <Stepper
-                  stages={stagesFor(modality)}
-                  current={job.stage}
-                  error={job.error}
-                  elapsed={(now - job.started) / 1000}
-                />
+                )}
               </div>
-            )}
-
-            {loadingReport && !report && <div className="card empty muted">Loading last review…</div>}
-
-            {!loadingReport && !report && !job && gc && (
-              <div className="card empty">
-                <h3>Not reviewed yet</h3>
-                <p>
-                  Run the agent on this {gc.modality} ad.{" "}
-                  {gc.modality === "video"
-                    ? "It transcribes the audio, picks frames worth looking at, extracts every claim and judges each against FDA/FTC rules."
-                    : "It extracts every claim and judges each against FDA/FTC rules."}
-                </p>
-                <button className="btn primary" onClick={() => start({ kind: "case", case_id: gc.id })}>
-                  <IconPlay size={12} /> Run review
-                </button>
-              </div>
-            )}
-
-            {report && (
-              <>
-                <VerdictPanel report={report} />
-                {gc && cmp && (
-                  <GoldenPanel
-                    gc={gc}
-                    report={report}
-                    cmp={cmp}
-                    onJump={(i) => (modality === "video" ? selectAndSeek(i) : select(i))}
+              <div className="panel-body" id="panel-body" role="tabpanel" aria-labelledby={`tab-${tabNow}`}>
+                {tabNow === "findings" &&
+                  (report ? (
+                    <FindingsList
+                      items={ordered}
+                      active={active}
+                      status={cmp?.predStatus}
+                      isVideo={isVideo}
+                      onSelect={pick}
+                      onSeek={seek}
+                    />
+                  ) : (
+                    <div className="panel-empty">
+                      <h3>{running ? "Findings are on their way" : "No findings yet"}</h3>
+                      <p>
+                        {running
+                          ? "Each flagged claim will appear here with the rule it breaks and a suggested rewrite."
+                          : "Run the review to see each flagged claim, the rule it breaks and a suggested rewrite."}
+                      </p>
+                    </div>
+                  ))}
+                {tabNow === "golden" && gc && cmp && report && (
+                  <GoldenTab gc={gc} report={report} cmp={cmp} onJump={pick} />
+                )}
+                {tabNow === "transcript" && report && (
+                  <TranscriptTab
+                    segments={report.transcript}
+                    findings={report.findings}
+                    currentTime={currentTime}
+                    follow={playing}
+                    onSeek={seek}
                   />
                 )}
-                <div className="findings">
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 6 }}>
-                    <span className="section-label">Findings</span>
-                    <span className="muted" style={{ fontSize: 12 }}>
-                      sorted by severity{modality === "video" ? ", then time" : ""}
-                    </span>
-                  </div>
-                  {ordered.length === 0 && (
-                    <div className="card empty">
-                      <h3>No issues flagged</h3>
-                      <p>The reviewer found no claims that break the rules it checks.</p>
-                    </div>
-                  )}
-                  {ordered.map(({ f, i }) => (
-                    <FindingCard
-                      key={i}
-                      finding={f}
-                      index={i}
-                      active={active === i}
-                      status={cmp?.predStatus[i]}
-                      isVideo={modality === "video"}
-                      onSeek={seek}
-                      onSelect={select}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
+                {tabNow === "notes" && gc && <CaseNotes gc={gc} />}
+              </div>
+            </aside>
           </div>
-        </div>
+        </>
+      )}
+    </main>
+  );
+}
+
+// ---------------------------------------------------------------- header pieces
+
+function CaseSwitcher({ cases, id, onPick }: { cases: CaseWithAsset[]; id: string; onPick: (id: string) => void }) {
+  const ordered = useMemo(() => inLibraryOrder(cases), [cases]);
+  const at = ordered.findIndex((c) => c.id === id);
+  return (
+    <div className="switcher">
+      <button className="icon-btn" disabled={at <= 0} onClick={() => onPick(ordered[at - 1].id)} aria-label="Previous ad">
+        <IconChevron size={16} className="flip" />
+      </button>
+      <select value={id} onChange={(e) => onPick(e.target.value)} aria-label="Switch to another ad">
+        {MODALITY_ORDER.map((m) => (
+          <optgroup key={m} label={`${MODALITY_LABEL[m]} ads`}>
+            {ordered
+              .filter((c) => c.modality === m)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.id}: {truncate(c.title, 64)}
+                </option>
+              ))}
+          </optgroup>
+        ))}
+      </select>
+      <button
+        className="icon-btn"
+        disabled={at < 0 || at >= ordered.length - 1}
+        onClick={() => onPick(ordered[at + 1].id)}
+        aria-label="Next ad"
+      >
+        <IconChevron size={16} />
+      </button>
+      <span className="muted tnum">
+        {at + 1} of {ordered.length}
+      </span>
+    </div>
+  );
+}
+
+function CaseNotes({ gc }: { gc: CaseWithAsset }) {
+  return (
+    <div className="case-notes">
+      {gc.notes && (
+        <>
+          <h3 className="panel-sub">Labeller notes</h3>
+          <p className="notes">{gc.notes}</p>
+        </>
+      )}
+      {gc.modality !== "text" && gc.ad_content && (
+        <>
+          <h3 className="panel-sub">Source transcript</h3>
+          <p className="notes pre">{gc.ad_content}</p>
+        </>
       )}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------- header
-
-function CaseHeader({
-  gc,
-  hasReport,
-  running,
-  onRun,
-}: {
-  gc: CaseWithAsset;
-  hasReport: boolean;
-  running: boolean;
-  onRun: () => void;
-}) {
-  return (
-    <div className="case-head">
-      <div style={{ minWidth: 0 }}>
-        <div className="section-label">
-          {SOURCE_LABEL[gc.source_type] ?? humanize(gc.source_type)} · <span className="mono">{gc.id}</span>
-        </div>
-        <h1>{gc.title}</h1>
-        <div className="meta-row">
-          <span>{shortCompany(gc.company)}</span>
-          <span className="sep" />
-          <span>{humanize(gc.vertical)}</span>
-          {gc.duration_s != null && (
-            <>
-              <span className="sep" />
-              <span className="tnum">{fmtTime(gc.duration_s)}</span>
-            </>
-          )}
-          {gc.source_url && (
-            <>
-              <span className="sep" />
-              <a href={gc.source_url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
-                Source <IconExternal size={12} />
-              </a>
-            </>
-          )}
-        </div>
-      </div>
-      <div className="case-head-actions">
-        <button className="btn primary" onClick={onRun} disabled={running}>
-          <IconPlay size={12} /> {running ? "Reviewing…" : hasReport ? "Re-run review" : "Run review"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function SourceContent({ gc }: { gc: CaseWithAsset }) {
-  return (
-    <details className="card notes-wrap">
-      <summary className="card-head" style={{ borderBottom: 0 }}>
-        <span className="chev">▸</span>
-        <h2>Source transcript &amp; labeller notes</h2>
-      </summary>
-      <div className="notes" style={{ borderTop: "1px solid var(--line)", whiteSpace: "pre-wrap" }}>
-        {gc.ad_content}
-        {gc.notes && (
-          <>
-            <div className="section-label" style={{ margin: "12px 0 4px" }}>
-              Notes
-            </div>
-            {gc.notes}
-          </>
-        )}
-      </div>
-    </details>
   );
 }
 
@@ -458,8 +513,16 @@ function HighlightedCopy({
             ) : (
               <mark
                 key={k}
+                role="button"
+                tabIndex={0}
                 className={`sev-${findings[part.i].severity} ${active === part.i ? "active" : ""}`}
                 onClick={() => onSelect(part.i!)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelect(part.i!);
+                  }
+                }}
               >
                 {part.t}
               </mark>
@@ -479,10 +542,15 @@ function NewAdForm({ onSubmit }: { onSubmit: (u: Upload, req: ReviewRequest) => 
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState("");
   const [over, setOver] = useState(false);
+  const [rejected, setRejected] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   const pick = (f: File | undefined) => {
-    if (f && (f.type.startsWith("video/") || f.type.startsWith("image/"))) setFile(f);
+    if (!f) return;
+    if (f.type.startsWith("video/") || f.type.startsWith("image/")) {
+      setFile(f);
+      setRejected(null);
+    } else setRejected(`“${f.name}” is not a video or an image. Use mp4, mov, webm, png or jpg.`);
   };
 
   const submit = () => {
@@ -497,63 +565,102 @@ function NewAdForm({ onSubmit }: { onSubmit: (u: Upload, req: ReviewRequest) => 
     }
   };
 
+  const ready = !!file || !!text.trim();
+
   return (
-    <div className="card" style={{ padding: 22, maxWidth: 760 }}>
-      <div
-        className={`dropzone ${over ? "over" : ""}`}
-        onClick={() => input.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setOver(false);
-          pick(e.dataTransfer.files[0]);
-        }}
-      >
-        <input
-          ref={input}
-          type="file"
-          accept="video/*,image/*"
-          hidden
-          onChange={(e) => pick(e.target.files?.[0])}
-        />
-        {file ? (
-          <div>
-            <b>{file.name}</b>
-            <div className="muted" style={{ fontSize: 12 }}>
-              {file.type} · {(file.size / 1e6).toFixed(1)} MB · click to replace
-            </div>
-          </div>
-        ) : (
-          <div>
-            <b>Drop a video or image ad</b>
-            <div className="muted" style={{ fontSize: 12 }}>
-              mp4, mov, webm, png, jpg · or click to browse
-            </div>
+    <div className="new-ad-layout">
+    <form
+      className="card new-ad"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <div className="field">
+        <span className="field-label" id="drop-label">
+          Video or image ad
+        </span>
+        <button
+          type="button"
+          className={`dropzone ${over ? "over" : ""} ${file ? "has-file" : ""}`}
+          aria-labelledby="drop-label"
+          onClick={() => input.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(false);
+            pick(e.dataTransfer.files[0]);
+          }}
+        >
+          {file ? (
+            <>
+              <b>{file.name}</b>
+              <span className="muted">
+                {file.type}, {(file.size / 1e6).toFixed(1)} MB. Select to replace it.
+              </span>
+            </>
+          ) : (
+            <>
+              <b>Drop a file here, or select to browse</b>
+              <span className="muted">mp4, mov, webm, png or jpg</span>
+            </>
+          )}
+        </button>
+        <input ref={input} type="file" accept="video/*,image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
+        {rejected && (
+          <div className="error-box" role="alert">
+            {rejected}
           </div>
         )}
       </div>
-      <div className="or">{file ? "optional landing-page or caption copy" : "or paste ad copy"}</div>
-      <textarea
-        className="paste"
-        placeholder="e.g. Same active ingredient as Ozempic®, at a fraction of the price…"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14, gap: 8 }}>
+
+      <div className="field">
+        <label className="field-label" htmlFor="paste">
+          {file ? "Caption or landing-page copy (optional)" : "Or paste ad copy"}
+        </label>
+        <textarea
+          id="paste"
+          className="paste"
+          placeholder="For example: Same active ingredient as Ozempic®, at a fraction of the price…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+      </div>
+
+      <div className="form-actions">
+        {!ready && <span className="muted">Add a file or some copy to start.</span>}
         {file && (
-          <button className="btn ghost" onClick={() => setFile(null)}>
+          <button type="button" className="btn" onClick={() => setFile(null)}>
             Remove file
           </button>
         )}
-        <button className="btn primary" disabled={!file && !text.trim()} onClick={submit}>
+        <button type="submit" className="btn primary" disabled={!ready}>
           <IconPlay size={12} /> Run review
         </button>
       </div>
+    </form>
+    <aside className="next-steps">
+      <h2>What happens next</h2>
+      <ol>
+        <li>
+          <b>The agent reads the ad.</b> For video it transcribes the audio and picks the frames worth looking at.
+        </li>
+        <li>
+          <b>It extracts every claim</b> from the speech, the on-screen text and the visuals.
+        </li>
+        <li>
+          <b>It checks each claim</b> against FDA and FTC rules and cites the rule it breaks.
+        </li>
+        <li>
+          <b>It drafts a rewrite</b> for each flagged claim, for a person to approve.
+        </li>
+      </ol>
+      <p className="muted">A 30-second video takes about a minute. Findings are flagged for human review.</p>
+    </aside>
     </div>
   );
 }
-
