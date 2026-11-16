@@ -1,0 +1,38 @@
+backend/app/llm.py
+  s_4964e310483ef2::t_8c19ae552307d8 124
+  s_4964e310483ef2::t_5d8315d8195a77 1-19,21-22,24-28,35-104,113-115,119-121,123,125-128,136-170
+  s_4964e310483ef2::t_34ad23480ed3ed 23
+  s_4964e310483ef2::t_8cb3080700e76c 105-112
+  s_4964e310483ef2::t_0174f224b0be1a 135
+  s_4964e310483ef2::t_13d421533df8a2 116-118,122,129-134
+  s_4964e310483ef2::t_fe3e95fbcb18a3 20
+  s_4964e310483ef2::t_b7fa4dfcf453fa 29-33
+  s_4964e310483ef2::t_0ea2719805b4ea 34
+backend/app/cache.py
+  s_4964e310483ef2::t_ed9a9a68d484b9 1-45
+backend/app/config.py
+  s_4964e310483ef2::t_83424b10b849fb 1-22
+  s_4964e310483ef2::t_9a60ca60eb4e14 23-25
+backend/pyproject.toml
+  s_4964e310483ef2::t_e7f52dadf488e0 1-20
+backend/app/schemas.py
+  s_4964e310483ef2::t_fa049bd293160e 1-165
+backend/uv.lock
+  s_4964e310483ef2::t_5f3ea97bb974ad 1-945
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e64f5ee91454ee58ec2e20f9f12fa2dbf4a25309",
+  "prompts": {},
+  "sessions": {
+    "s_4964e310483ef2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "50da497f-fcd1-4068-91b3-2daecbdadfc0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
