@@ -1,0 +1,29 @@
+backend/tests/test_media.py
+  s_4964e310483ef2::t_06654ee77bc2cc 1-52
+backend/tests/test_scoring.py
+  s_4964e310483ef2::t_fde1ec664919ba 1-234
+  s_4964e310483ef2::t_3e05b6c758c103 235-255
+backend/tests/test_api.py
+  s_4964e310483ef2::t_7294370a64170b 19
+  s_4964e310483ef2::t_e616de968d4bee 27
+  s_4964e310483ef2::t_90a59bfcb9aa42 1-18,20-26,28-226
+backend/tests/test_cache.py
+  s_4964e310483ef2::t_601445891fcf2f 1-15,17-18,20-22,24-42
+  s_4964e310483ef2::t_ef355b63ef7a83 16,19,23,43-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9d42b372e9363851c0fcd225925cf37c23ceab4d",
+  "prompts": {},
+  "sessions": {
+    "s_4964e310483ef2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "50da497f-fcd1-4068-91b3-2daecbdadfc0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
