@@ -1,0 +1,26 @@
+backend/app/rules.md
+  s_4964e310483ef2::t_35e64c38a1382c 227-229
+  s_4964e310483ef2::t_0d402bb5c7672a 1-63,67-69,87-226,230-234
+  s_4964e310483ef2::t_85358951b39c35 64-66,70-86
+backend/app/media.py
+  s_4964e310483ef2::t_69a6de35abcede 1-5,7-10,12-74,86-135
+  s_4964e310483ef2::t_c6cc1994f3ff7f 75-85
+  s_4964e310483ef2::t_eadaef3ae9b8fa 11
+  s_4964e310483ef2::t_555180b3d6e029 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b3267ee524fde2922d8dfb145662e7fb3df247f6",
+  "prompts": {},
+  "sessions": {
+    "s_4964e310483ef2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "50da497f-fcd1-4068-91b3-2daecbdadfc0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
